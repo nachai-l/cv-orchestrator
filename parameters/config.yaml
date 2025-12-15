@@ -1,0 +1,30 @@
+# parameters/config.yaml
+#
+# Static routing/configuration for the Orchestrator API.
+# DataFetcher and OrchestratorService read endpoint paths from here.
+
+service:
+  name: "eport_orchestrator_api"
+
+data_api:
+  endpoints:
+    # Student full profile hydration
+    student_full_profile: "/v1/students/{student_id}/full-profile"
+
+    # Role taxonomy (generic role)
+    role_taxonomy: "/v1/roles/{role_id}/taxonomy"
+
+    # JD taxonomy (concrete job)
+    jd_taxonomy: "/v1/jds/{jd_id}/taxonomy"
+
+    # Template information
+    template_info: "/v1/templates/{template_id}"
+
+generation_api:
+  endpoints:
+    # Stage-0 → CV generation endpoint in eport_generation
+    generate_cv: "/generate_cv"
+
+features:
+  passthrough_raw_generation_result: true
+  echo_request_metadata: true

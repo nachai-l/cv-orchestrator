@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "eport-orchestrator-api"
+version = "0.1.0"
+description = "Orchestrator API for CV Generation (E-Portfolio System)"
+authors = ["Nachai Limsettho <nachailim@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "eport_orchestrator_api", from = "." }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# Web framework
+fastapi = "^0.115.0"
+uvicorn = "^0.30.0"
+
+# HTTP client for calling data_api and generation service
+httpx = {version="^0.27.0", extras=["http2"]}
+
+# Settings + schema validation
+pydantic = "^2.9.0"
+pydantic-settings = "^2.4.0"
+
+# Logging
+structlog = "^24.1.0"
+
+# Async utilities
+anyio = "^4.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.23.6"
+httpx = {version="^0.27.0", extras=["http2"]}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

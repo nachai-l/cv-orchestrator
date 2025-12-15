@@ -1,0 +1,27 @@
+# parameters/parameters.yaml
+#
+# Base configuration for the Orchestrator API.
+# Loaded by functions.utils.settings.Settings as a fallback
+# when environment variables are not provided.
+
+environment: "local"
+
+service_name: "eport_orchestrator_api"
+
+# Base URLs for downstream services (REQUIRED in practice)
+data_api_base_url: "http://localhost:8001"       # eport_data_api
+generation_api_base_url: "http://localhost:8000" # eport_generation
+
+# Logging
+log_level: "INFO"
+
+# HTTP + generation timeouts (seconds)
+http_timeout_seconds: 15
+generation_timeout_seconds: 180
+
+# Number of retries for data API calls
+max_retries: 2
+
+# send user_or_llm_comment to cv_generation API or not
+features:
+  enable_user_or_llm_comments: true   # or false
