@@ -228,7 +228,7 @@ pytest -q
 Current coverage:
 
 * Health endpoint
-* Happy-path CV generation (generation service mocked)
+* Happy-path CV generation
 
 ---
 
@@ -271,15 +271,4 @@ gcloud run services add-iam-policy-binding cv-orchestrator \
 ✅ End-to-end integration tested with Data API + Generation Service
 ✅ Stage-0 validation enforced
 ✅ Structured logs and request tracing enabled
-🟡 Role / JD data quality enforced strictly (empty skills → hard error)
 
----
-
-If you want, next we can:
-
-* Add **architecture diagram**
-* Add **IAM / security section**
-* Add **timeout & retry design notes**
-* Add **API contract versioning notes**
-
-Just tell me.
