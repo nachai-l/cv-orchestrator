@@ -1,176 +1,209 @@
-# E-port Orchestrator API
+# E-Port Orchestrator API
 
-Backend-for-Frontend (BFF) service that orchestrates:
+**Backend-for-Frontend (BFF)** service that orchestrates end-to-end CV generation by coordinating:
 
-- **E-port Data API** (`eport_data_api`) – student profile + taxonomy hydration
-- **E-port Generation Service** (`eport_generation`) – Stage A–D CV generation
+* **E-Port Data API (`eport_data_api`)**
+  Student profiles, role taxonomy, JD taxonomy, template metadata
+* **E-Port Generation Service (`eport_generation`)**
+  Stage A–D LLM-based CV generation pipeline
 
-It exposes a single external endpoint:
-
-```http
-POST /v1/orchestrator/generate-cv
-````
+The Orchestrator exposes **one stable external API** and hides all internal data hydration and generation complexity.
 
 ---
 
 ## 1. Responsibilities
 
-* Validate external requests (IDs + options, not full profile).
-* Fetch hydrated data from `eport_data_api`:
+The Orchestrator API is responsible for:
 
-  * `student_full_profile`
-  * `role_taxonomy`
-  * `jd_taxonomy`
-  * `template_info`
-* Assemble **Stage-0 payload** aligned with `eport_generation.input_schema`.
-* Call `eport_generation` and return a clean **GenerateCVResponse** envelope.
+1. **Validating external requests**
+
+   * Accepts only identifiers and generation options
+   * No raw profile data is accepted from clients
+
+2. **Hydrating canonical data from `eport_data_api`**
+
+   * `student_full_profile`
+   * `role_taxonomy`
+   * `jd_taxonomy`
+   * `template_info`
+
+3. **Assembling a validated Stage-0 payload**
+
+   * Strictly aligned with `eport_generation.schemas.stage0_schema`
+   * Performs normalization and consistency checks
+
+4. **Calling the CV Generation Service**
+
+   * Handles timeouts, retries, and error propagation
+   * Returns a clean, stable response envelope
+
+5. **Returning a unified `GenerateCVResponse`**
+
+   * Includes generated CV sections
+   * Preserves raw Stage-D output for auditing and debugging
+   * Passes through user / LLM comments and request metadata
 
 ---
 
 ## 2. Project Structure
 
-```text
+```
 .
-├── api.py                         # FastAPI app + endpoints
+├── api.py                         # FastAPI app + public endpoints
 ├── functions/
 │   ├── orchestrator/
 │   │   ├── eport_orchestrator_service.py  # Core orchestration logic
-│   │   └── data_fetcher.py               # Calls eport_data_api
+│   │   ├── data_fetcher.py                # Calls eport_data_api
+│   │   ├── profile_normalizer.py
+│   │   ├── role_normalizer.py
+│   │   └── job_normalizer.py
 │   ├── utils/
-│   │   ├── settings.py                   # ENV + parameters.yaml config
-│   │   └── http_client.py                # Reserved for future shared HTTP logic
-│   └── models/                           # Reserved for future internal models
+│   │   ├── settings.py            # ENV + parameters.yaml loading
+│   │   └── http_client.py         # Shared HTTP client utilities
+│   └── models/                    # Reserved for future internal models
 ├── schemas/
-│   ├── input_schema.py           # External /v1/orchestrator/generate-cv request
-│   ├── output_schema.py          # External response envelope
-│   └── stage0_schema.py          # Internal Stage-0 payload (→ eport_generation)
+│   ├── input_schema.py             # External request schema
+│   ├── output_schema.py            # External response envelope
+│   └── stage0_schema.py            # Internal Stage-0 payload
 ├── parameters/
-│   └── parameters.yaml           # Local/dev config fallback
+│   └── parameters.yaml             # Local / dev config fallback
 ├── tests/
 │   └── test_generate_cv_endpoint.py
 ├── requirements.txt
-└── Dockerfile
+├── Dockerfile
+└── README.md
 ```
 
 ---
 
 ## 3. Configuration
 
-Configuration is loaded in this order:
+Configuration is resolved in the following order:
 
-1. **Environment variables** (prefix `EPORT_ORCH_`)
-2. **`parameters/parameters.yaml`** (local/dev fallback)
-3. Hard-coded defaults (only for non-critical fields)
+1. **Environment variables** (highest priority)
+2. `parameters/parameters.yaml` (local / dev fallback)
+3. Hard-coded defaults (non-critical fields only)
 
-Key variables:
+### Key Environment Variables
 
 ```bash
-export EPORT_ORCH_DATA_API_BASE_URL="http://localhost:8001"
-export EPORT_ORCH_GENERATION_API_BASE_URL="http://localhost:8003"
-export EPORT_ORCH_ENVIRONMENT="local"    # local | dev | prod
-export EPORT_ORCH_LOG_LEVEL="INFO"
-export EPORT_ORCH_HTTP_TIMEOUT_SECONDS="15"
-export EPORT_ORCH_GENERATION_TIMEOUT_SECONDS="60"
-export EPORT_ORCH_MAX_RETRIES="2"
+ENVIRONMENT=prod                     # local | dev | prod
+
+DATA_API_BASE_URL=https://eport-data-api-xxxx.a.run.app
+GENERATION_API_BASE_URL=https://cv-generation-service-xxxx.a.run.app
+
+HTTP_TIMEOUT_SECONDS=30
+GENERATION_TIMEOUT_SECONDS=300
+MAX_RETRIES=2
+LOG_LEVEL=INFO
 ```
 
-`parameters/parameters.yaml` contains sane defaults for local runs.
+`parameters/parameters.yaml` provides sane defaults for local development.
 
 ---
 
-## 4. Endpoints
+## 4. API Endpoints
 
-### `GET /healthz`
+### 4.1 Health Check
 
-Simple liveness probe used by Cloud Run / monitoring.
+**GET `/health`**
 
-**Response:**
+Used by Cloud Run and monitoring.
+
+**Response**
 
 ```json
 {
   "status": "ok",
-  "service": "eport_orchestrator_api"
+  "service": "eport_orchestrator_api",
+  "environment": "prod"
 }
 ```
 
-### `POST /v1/orchestrator/generate-cv`
+---
+
+### 4.2 Generate CV
+
+**POST `/v1/orchestrator/generate-cv`**
 
 High-level CV generation entry point.
 
-**Request (simplified):**
+#### Request (simplified)
 
 ```json
 {
   "student_id": "U-1001",
-  "role_id": "role%23ai_engineer",
-  "jd_id": "jd%23ai_lead_gov_2025",
+  "role_id": "role#ai_engineer",
+  "jd_id": "jd#ai_lead_gov_2025",
   "template_id": "T_EMPLOYER_STD_V3",
   "language": "en",
   "language_tone": "formal",
-  "sections": ["profile_summary", "skills", "experience"],
-  "user_input_cv_text_by_section": {
-    "profile_summary": "Custom summary (optional)"
-  },
+  "sections": ["profile_summary", "skills", "experience", "education"],
+  "user_input_cv_text_by_section": null,
   "user_or_llm_comments": {
-    "user_comments": {
-      "profile_summary": "Please emphasize research experience"
-    }
+    "profile_summary": "Please emphasize research experience"
   },
   "request_metadata": {
-    "channel": "eport-ui",
-    "request_id": "REQ-2025-00001"
+    "source": "cloud-run"
   }
 }
 ```
 
-**Response (simplified):**
+#### Response (simplified)
 
 ```json
 {
   "status": "success",
   "cv": {
-    "job_id": "JOB_U-1001_2025-01-01",
+    "job_id": "JOB_U-1001",
     "template_id": "T_EMPLOYER_STD_V3",
     "language": "en",
     "language_tone": "formal",
-    "rendered_html": "<html>...</html>",
-    "rendered_markdown": null,
     "sections": {
-      "profile_summary": "...",
-      "skills": "...",
-      "experience": "..."
+      "profile_summary": { "...": "..." },
+      "skills": { "...": "..." },
+      "experience": { "...": "..." }
     },
-    "raw_generation_result": { "...": "full Stage-D JSON" }
+    "raw_generation_result": { "...": "Full Stage-D JSON" }
   },
   "error": null,
   "user_or_llm_comments": {
-    "user_comments": {
-      "profile_summary": "Please emphasize research experience"
-    }
+    "profile_summary": "Please emphasize research experience"
   },
   "request_metadata": {
-    "channel": "eport-ui",
-    "request_id": "REQ-2025-00001"
+    "source": "cloud-run"
   }
 }
 ```
 
-On error, `status="error"` and `error` is populated with a `code`, `message`, and optional `details`.
+#### Error Handling
+
+* `status = "error"`
+* `error.code`, `error.message`, and `error.details` populated
+* Example:
+
+  * Missing role skills
+  * Invalid taxonomy
+  * Downstream service timeout
 
 ---
 
 ## 5. Local Development
 
-### 5.1 Install dependencies
+### 5.1 Install Dependencies
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-
 pip install -r requirements.txt
 ```
 
-Make sure `eport_data_api` and `eport_generation` are running locally (e.g., on ports `8001` and `8003`).
+Ensure the following services are running locally:
+
+* `eport_data_api` (e.g. `localhost:8001`)
+* `eport_generation` (e.g. `localhost:8000`)
+
+---
 
 ### 5.2 Run the API
 
@@ -178,10 +211,10 @@ Make sure `eport_data_api` and `eport_generation` are running locally (e.g., on 
 uvicorn api:app --reload --port 8002
 ```
 
-Check:
+Verify:
 
 ```bash
-curl http://localhost:8002/healthz
+curl http://localhost:8002/health
 ```
 
 ---
@@ -192,34 +225,61 @@ curl http://localhost:8002/healthz
 pytest -q
 ```
 
-Current tests:
+Current coverage:
 
-* `test_healthz` – liveness endpoint.
-* `test_generate_cv_success` – happy-path orchestration (generation call is monkeypatched).
+* Health endpoint
+* Happy-path CV generation (generation service mocked)
 
 ---
 
 ## 7. Deployment (Cloud Run)
 
-High-level steps (mirrors other services):
+### 7.1 Build & Push Image
 
 ```bash
-gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT/eport-orchestrator-api/service
-
-gcloud run deploy eport-orchestrator-api \
-  --image=REGION-docker.pkg.dev/PROJECT/eport-orchestrator-api/service \
-  --platform=managed \
-  --region=REGION \
-  --allow-unauthenticated
+gcloud builds submit \
+  --tag asia-southeast1-docker.pkg.dev/PROJECT_ID/cv-orchestrator/service:latest
 ```
 
-Configure env vars:
+### 7.2 Deploy Service
 
 ```bash
-gcloud run services update eport-orchestrator-api \
-  --update-env-vars=\
-EPORT_ORCH_DATA_API_BASE_URL=https://eport-data-api-xxxx.a.run.app,\
-EPORT_ORCH_GENERATION_API_BASE_URL=https://eport-generation-xxxx.a.run.app,\
-EPORT_ORCH_ENVIRONMENT=prod
+gcloud run deploy cv-orchestrator \
+  --image asia-southeast1-docker.pkg.dev/PROJECT_ID/cv-orchestrator/service:latest \
+  --region asia-southeast1 \
+  --platform managed \
+  --service-account cv-orchestrator-sa@PROJECT_ID.iam.gserviceaccount.com
 ```
 
+### 7.3 IAM (Invoker)
+
+* **Internal-only access**: remove `allUsers`
+* **Public access** (temporary / demo):
+
+```bash
+gcloud run services add-iam-policy-binding cv-orchestrator \
+  --region asia-southeast1 \
+  --member allUsers \
+  --role roles/run.invoker
+```
+
+---
+
+## 8. Current Status
+
+✅ Deployed on Cloud Run
+✅ End-to-end integration tested with Data API + Generation Service
+✅ Stage-0 validation enforced
+✅ Structured logs and request tracing enabled
+🟡 Role / JD data quality enforced strictly (empty skills → hard error)
+
+---
+
+If you want, next we can:
+
+* Add **architecture diagram**
+* Add **IAM / security section**
+* Add **timeout & retry design notes**
+* Add **API contract versioning notes**
+
+Just tell me.
