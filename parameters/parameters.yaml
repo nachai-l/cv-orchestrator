@@ -4,13 +4,15 @@
 # Loaded by functions.utils.settings.Settings as a fallback
 # when environment variables are not provided.
 
-environment: "local"
+environment: "prod" # for record keeping only
 
 service_name: "eport_orchestrator_api"
 
 # Base URLs for downstream services (REQUIRED in practice)
-data_api_base_url: "http://localhost:8001"       # eport_data_api
-generation_api_base_url: "http://localhost:8000" # eport_generation
+data_api_base_url: "https://eport-data-api-810737581373.asia-southeast1.run.app"       # eport_data_api
+generation_api_base_url: "https://cv-generation-service-810737581373.asia-southeast1.run.app" # eport_generation
+#data_api_base_url: "http://localhost:8001"       # eport_data_api
+#generation_api_base_url: "http://localhost:8000" # eport_generation
 
 # Logging
 log_level: "INFO"
