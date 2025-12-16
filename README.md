@@ -267,8 +267,8 @@ gcloud run services add-iam-policy-binding cv-orchestrator \
 
 ## 8. Current Status
 
-✅ Deployed on Cloud Run
-✅ End-to-end integration tested with Data API + Generation Service
-✅ Stage-0 validation enforced
-✅ Structured logs and request tracing enabled
+* ✅ Deployed on Cloud Run
+* ✅ End-to-end integration tested with Data API + Generation Service
+* ✅ Stage-0 validation enforced
+* ✅ Structured logs and request tracing enabled
 
