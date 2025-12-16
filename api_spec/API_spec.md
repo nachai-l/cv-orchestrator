@@ -7,10 +7,32 @@ The **CV Orchestrator API** is a **Backend-for-Frontend (BFF)** service responsi
 It exposes **one external endpoint** that:
 
 1. Accepts a lightweight request (IDs + options)
-2. Fetches and hydrates required data from `eport_data_api` (**API complete; data currently mocked**)
+2. Fetches and hydrates required data from `eport_data_api`
+   (**API implementation complete; data currently mocked**)
 3. Assembles a validated **Stage-0 payload**
 4. Calls the **CV Generation Service** to execute the Stage A–D pipeline
 5. Returns a clean, frontend-ready response
+
+---
+
+## Interactive API Documentation (Swagger / Browser)
+
+The Orchestrator exposes **FastAPI OpenAPI documentation**, allowing the API to be explored and called directly from a browser.
+
+**Swagger UI (Production):**
+
+```
+https://cv-orchestrator-810737581373.asia-southeast1.run.app/docs#/default/generate_cv_endpoint_v1_orchestrator_generate_cv_post
+```
+
+From this page you can:
+
+* Inspect request / response schemas
+* Execute live requests against Cloud Run
+* Validate enum values and constraints
+* Debug payloads without `curl`
+
+> ⚠️ Public access is currently enabled for demo/testing purposes.
 
 ---
 
@@ -35,12 +57,14 @@ CV Orchestrator API (BFF)
 ## Base URL (Production)
 
 ```
-https://cv-orchestrator-<hash>.asia-southeast1.run.app
+https://cv-orchestrator-810737581373.asia-southeast1.run.app
 ```
 
 ---
 
 ## Available Mocked IDs (Current)
+
+> ⚠️ IDs are stable; underlying data is mocked and may change.
 
 ### Students
 
@@ -58,7 +82,7 @@ https://cv-orchestrator-<hash>.asia-southeast1.run.app
 * `jd#mitsui_biotech_mgr_2025`
 * `jd#ai_lead_gov_2025`
 
-> ⚠️ Note: Missing or empty role/JD skill sets will result in a **Stage-0 validation error**.
+> ❗ Missing or empty **role required skills** will result in a **Stage-0 validation error**.
 
 ---
 
@@ -68,7 +92,7 @@ https://cv-orchestrator-<hash>.asia-southeast1.run.app
 
 #### `GET /health`
 
-Simple liveness endpoint (browser-callable).
+Browser-callable liveness endpoint.
 
 **Response**
 
@@ -88,6 +112,12 @@ Simple liveness endpoint (browser-callable).
 
 High-level CV generation entry point.
 
+**Browser-accessible via Swagger UI:**
+
+```
+/docs → generate_cv_endpoint_v1_orchestrator_generate_cv_post
+```
+
 ---
 
 ## Request Schema
@@ -99,7 +129,7 @@ High-level CV generation entry point.
 | `student_id`    | string        | Platform user ID        |
 | `template_id`   | string        | CV template identifier  |
 | `language`      | enum          | Output language         |
-| `language_tone` | enum          | Writing style           |
+| `language_tone` | enum          | Writing style / tone    |
 | `sections`      | array[string] | CV sections to generate |
 
 ---
@@ -116,14 +146,16 @@ High-level CV generation entry point.
 
 ---
 
-### Enumerations
+## Enumerations
 
-#### `language`
+### `language`
 
 * `en`
 * `th`
 
-#### `language_tone` (current, subject to future change)
+### `language_tone`
+
+*(current, subject to future change)*
 
 * `formal`
 * `neutral`
@@ -131,9 +163,7 @@ High-level CV generation entry point.
 * `funny`
 * `casual`
 
-#### `sections`
-
-Allowed values:
+### `sections`
 
 ```
 profile_summary
@@ -159,7 +189,8 @@ additional_info
 ### A. Minimal (No Role / No JD)
 
 ```bash
-curl -X POST https://cv-orchestrator-<hash>.run.app/v1/orchestrator/generate-cv \
+curl -X POST \
+  https://cv-orchestrator-810737581373.asia-southeast1.run.app/v1/orchestrator/generate-cv \
   -H "Content-Type: application/json" \
   -d '{
     "student_id": "U-1002",
@@ -170,18 +201,19 @@ curl -X POST https://cv-orchestrator-<hash>.run.app/v1/orchestrator/generate-cv 
   }'
 ```
 
-Behavior:
+**Behavior**
 
+* Uses student profile only
 * Role inference disabled
 * JD alignment treated as neutral
-* Uses student profile only
 
 ---
 
 ### B. With Role and JD
 
 ```bash
-curl -X POST https://cv-orchestrator-<hash>.run.app/v1/orchestrator/generate-cv \
+curl -X POST \
+  https://cv-orchestrator-810737581373.asia-southeast1.run.app/v1/orchestrator/generate-cv \
   -H "Content-Type: application/json" \
   -d '{
     "student_id": "U-1002",
@@ -204,7 +236,7 @@ curl -X POST https://cv-orchestrator-<hash>.run.app/v1/orchestrator/generate-cv 
 
 ## Response Schema
 
-### Success Response
+### Success
 
 ```json
 {
@@ -214,27 +246,16 @@ curl -X POST https://cv-orchestrator-<hash>.run.app/v1/orchestrator/generate-cv 
     "template_id": "T_EMPLOYER_STD_V3",
     "language": "en",
     "language_tone": "formal",
-    "rendered_html": null,
-    "rendered_markdown": null,
-    "sections": {
-      "profile_summary": {
-        "text": "...",
-        "word_count": 96,
-        "matched_jd_skills": [],
-        "confidence_score": 1.0
-      }
-    },
+    "sections": { ... },
     "raw_generation_result": { "... full Stage-D payload ..." }
   },
-  "error": null,
-  "user_or_llm_comments": { ... },
-  "request_metadata": { ... }
+  "error": null
 }
 ```
 
 ---
 
-### Error Response
+### Error
 
 ```json
 {
@@ -252,58 +273,6 @@ curl -X POST https://cv-orchestrator-<hash>.run.app/v1/orchestrator/generate-cv 
 
 ---
 
-## Validation Rules (Orchestrator Level)
-
-| Rule               | Behavior          |
-| ------------------ | ----------------- |
-| Missing student    | Error             |
-| Empty role skills  | Error             |
-| Empty JD skills    | Allowed           |
-| Invalid enum       | 400               |
-| Duplicate sections | Auto-deduplicated |
-| Unknown fields     | Rejected          |
-
----
-
-## Stage-0 Composition (Internal)
-
-The orchestrator constructs the **Stage-0 Expected Input Payload** for the CV Generation Service:
-
-| Component                       | Required |
-| ------------------------------- | -------- |
-| `student_profile`               | ✅        |
-| `template_info`                 | ✅        |
-| `cv_language`                   | ✅        |
-| `job_role_info`                 | Optional |
-| `job_position_info`             | Optional |
-| `user_input_cv_text_by_section` | Optional |
-
-This payload is then sent to:
-
-```
-POST cv-generation-service /generate_cv
-```
-
----
-
-## Security & Access
-
-* Public access enabled (for demo)
-* Designed for **IAM / ID-token protection**
-* No PII logged
-* Prompt injection handled downstream (Stage A)
-
----
-
-## Non-Goals (Out of Scope)
-
-* PDF / HTML rendering
-* Authentication UI
-* Direct LLM access
-* Long-term persistence
-
----
-
 ## Status
 
 | Component             | Status         |
@@ -315,4 +284,3 @@ POST cv-generation-service /generate_cv
 | Auth                  | 🔜 Planned     |
 
 ---
-
