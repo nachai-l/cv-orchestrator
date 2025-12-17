@@ -25,10 +25,11 @@ async def test_generate_cv_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
     We monkeypatch OrchestratorService.generate_cv to avoid calling
     real downstream services (data_api, generation service).
+
+    NOTE: API response is camelCase at the boundary.
     """
 
-    async def fake_generate_cv(request):  # type: ignore[override]
-        # Return a minimal but valid GenerateCVResponse
+    async def fake_generate_cv(_request):  # type: ignore[override]
         cv = GeneratedCV(
             job_id="JOB_TEST_123",
             template_id="T_EMPLOYER_STD_V3",
@@ -50,6 +51,7 @@ async def test_generate_cv_success(monkeypatch: pytest.MonkeyPatch) -> None:
     # Patch the global service instance used by api.py
     monkeypatch.setattr(service, "generate_cv", fake_generate_cv)
 
+    # Backward compatible request (snake_case still accepted)
     payload = {
         "student_id": "U-1001",
         "template_id": "T_EMPLOYER_STD_V3",
@@ -65,7 +67,12 @@ async def test_generate_cv_success(monkeypatch: pytest.MonkeyPatch) -> None:
         data = resp.json()
         assert data["status"] == "success"
         assert data["cv"] is not None
-        assert data["cv"]["job_id"] == "JOB_TEST_123"
-        assert data["cv"]["template_id"] == "T_EMPLOYER_STD_V3"
-        assert data["cv"]["rendered_html"].startswith("<html>")
+
+        # ✅ camelCase response assertions
+        assert data["cv"]["jobId"] == "JOB_TEST_123"
+        assert data["cv"]["templateId"] == "T_EMPLOYER_STD_V3"
+        assert data["cv"]["renderedHtml"].startswith("<html>")
         assert data["error"] is None
+
+        # optional: ensure converter also touched nested fields
+        assert "rawGenerationResult" in data["cv"]

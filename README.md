@@ -1,3 +1,4 @@
+```md
 # E-Port Orchestrator API
 
 The **E-Port Orchestrator API** is a **Backend-for-Frontend (BFF)** service responsible for orchestrating **end-to-end CV generation** across multiple internal services.
@@ -11,7 +12,6 @@ It provides a **single, stable, frontend-facing API** while encapsulating all da
 This service exists to:
 
 * Shield frontend clients from:
-
   * Multiple backend APIs
   * Complex schema contracts
   * Multi-stage LLM pipelines
@@ -34,7 +34,7 @@ Provides canonical data objects:
 * Job description (JD) taxonomy (optional)
 * CV template metadata
 
-✅ API implementation complete
+✅ API implementation complete  
 ⚠️ Data is currently **mocked** (IDs are stable, values may change)
 
 ---
@@ -53,16 +53,19 @@ Executes the **Stage A–D CV Generation Pipeline**, including:
 ### End-to-End Flow
 
 ```
+
 Client
-  |
-  | POST /v1/orchestrator/generate-cv
-  v
+|
+| POST /api/v1/cv-generations        (recommended)
+| POST /v1/orchestrator/generate-cv  (deprecated alias)
+v
 E-Port Orchestrator API (BFF)
-  ├─ Validate request + enums
-  ├─ Fetch data from eport_data_api
-  ├─ Normalize & assemble Stage-0 payload
-  ├─ Call CV Generation Service (/generate_cv)
-  └─ Return stable response envelope
+├─ Validate request + enums
+├─ Fetch data from eport_data_api
+├─ Normalize & assemble Stage-0 payload
+├─ Call CV Generation Service (/generate_cv)
+└─ Return stable response envelope
+
 ```
 
 ---
@@ -73,11 +76,16 @@ E-Port Orchestrator API (BFF)
 
 * Accepts **only identifiers and generation options**
 * Rejects:
-
   * Raw profile text
   * Arbitrary prompts
   * Invalid enum values
 * Ensures predictable behavior and injection resistance
+
+**Request naming policy**
+
+* ✅ Preferred: **camelCase** at API boundary
+* ✅ Backward compatible: **snake_case** is still accepted
+* ✅ Internally normalized into typed Pydantic models
 
 ---
 
@@ -114,7 +122,6 @@ This payload becomes the **single source of truth** for downstream generation.
 
 * Calls `/generate_cv` on the CV Generation Service
 * Applies:
-
   * Timeout control
   * Retry logic
   * Structured error propagation
@@ -131,6 +138,10 @@ Returns a **stable response envelope** that includes:
 * Raw Stage-D output (for audit/debug)
 * User comments and request metadata (pass-through)
 
+**Response naming policy**
+
+* ✅ **camelCase enforced** at API boundary (success + error)
+
 ---
 
 ## API Specification
@@ -138,7 +149,9 @@ Returns a **stable response envelope** that includes:
 📄 **Authoritative API contract** is documented in:
 
 ```
+
 api_spec/API_spec.md
+
 ```
 
 The API spec includes:
@@ -151,7 +164,7 @@ The API spec includes:
 * Mocked IDs currently available
 * Alignment with the CV Generation Service (Stage 0–D)
 
-> **README = conceptual & operational overview**
+> **README = conceptual & operational overview**  
 > **API_spec.md = contract you code against**
 
 ---
@@ -161,17 +174,14 @@ The API spec includes:
 The same endpoint supports multiple modes:
 
 1. **Student-only CV**
-
    * No role, no JD
    * General-purpose professional CV
 
 2. **Role-aware CV**
-
    * Role taxonomy provided
    * Skill framing adjusted to role expectations
 
 3. **JD-aligned CV**
-
    * Specific JD taxonomy provided
    * Skill matching, alignment metrics enabled
 
@@ -201,34 +211,39 @@ Enum validation is enforced at the orchestrator boundary.
 ## Project Structure
 
 ```
+
 .
 ├── api.py                         # FastAPI app + public endpoints
 ├── api_spec/
 │   └── API_spec.md                # Formal API contract
 ├── functions/
 │   ├── orchestrator/
-│   │   ├── eport_orchestrator_service.py  # Core orchestration logic
-│   │   ├── data_fetcher.py                # Data API integration
+│   │   ├── eport_orchestrator_service.py   # Core orchestration logic
+│   │   ├── data_fetcher.py                 # Data API integration
 │   │   ├── profile_normalizer.py
 │   │   ├── role_normalizer.py
 │   │   └── job_normalizer.py
 │   ├── utils/
-│   │   ├── settings.py            # ENV + parameters.yaml loading
-│   │   └── http_client.py         # Shared HTTP utilities
-│   └── models/                    # Reserved for future use
+│   │   ├── settings.py                     # ENV + parameters.yaml loading
+│   │   ├── http_client.py                  # Shared HTTP utilities
+│   │   └── json_naming_converter.py        # snake_case -> camelCase response converter
+│   └── models/                             # Reserved for future use
 ├── schemas/
-│   ├── input_schema.py             # External request schema
+│   ├── input_schema.py             # External request schema (camelCase + snake_case accepted)
 │   ├── output_schema.py            # External response envelope
 │   └── stage0_schema.py            # Internal Stage-0 payload
 ├── parameters/
 │   ├── parameters.yaml
 │   └── config.yaml
 ├── tests/
-│   └── test_generate_cv_endpoint.py
+│   ├── test_generate_cv_endpoint.py
+│   ├── local_api_actual_tests.py   # Local smoke calls (optional / manual)
+│   └── gcp_api_actual_tests.py     # GCP (Cloud Run) smoke calls (optional / manual)
 ├── Dockerfile
 ├── requirements.txt
 └── README.md
-```
+
+````
 
 ---
 
@@ -252,7 +267,7 @@ HTTP_TIMEOUT_SECONDS=30
 GENERATION_TIMEOUT_SECONDS=300
 MAX_RETRIES=2
 LOG_LEVEL=INFO
-```
+````
 
 ---
 
@@ -260,7 +275,8 @@ LOG_LEVEL=INFO
 
 ### Health Check
 
-**GET `/health`**
+**GET `/health`** ✅ canonical (Cloud Run + local)
+**GET `/healthz`** ⚠️ optional (may be 404 on Cloud Run)
 
 Used for Cloud Run liveness and monitoring.
 
@@ -274,13 +290,21 @@ Used for Cloud Run liveness and monitoring.
 
 ---
 
-### Generate CV
+### Create CV Generation (REST)
 
-**POST `/v1/orchestrator/generate-cv`**
+**POST `/api/v1/cv-generations`** ✅ recommended
 
-Single entry point for all CV generation modes.
+Primary endpoint for all CV generation modes.
 
 ➡️ See **`api_spec/API_spec.md`** for full examples and constraints.
+
+---
+
+### Deprecated Alias (Backward Compatibility)
+
+**POST `/v1/orchestrator/generate-cv`** (deprecated)
+
+Same behavior as the REST endpoint but returns `200 OK` for legacy clients.
 
 ---
 
@@ -314,21 +338,36 @@ pytest -q
 
 Current coverage includes:
 
-* Health endpoint
+* Health endpoint(s)
 * Successful orchestration
-* Stage-0 validation failures
-* Error propagation
+* Request validation failures
+* Error propagation + standardized error envelope
+* Correlation ID + API version header behavior
+* Deprecated alias behavior
+
+### Manual / Actual API Smoke Tests (Not for CI)
+
+These make **real HTTP calls** and are intended for manual runs only.
+
+```bash
+python tests/local_api_actual_tests.py
+python tests/gcp_api_actual_tests.py
+```
 
 ---
 
 ## Deployment (Cloud Run)
 
-Build & deploy:
+Build:
 
 ```bash
 gcloud builds submit \
   --tag asia-southeast1-docker.pkg.dev/PROJECT_ID/cv-orchestrator/service:latest
+```
 
+Deploy:
+
+```bash
 gcloud run deploy cv-orchestrator \
   --image asia-southeast1-docker.pkg.dev/PROJECT_ID/cv-orchestrator/service:latest \
   --region asia-southeast1 \
@@ -342,9 +381,13 @@ gcloud run deploy cv-orchestrator \
 
 * ✅ Cloud Run deployed
 * ✅ End-to-end smoke tested
+* ✅ REST endpoint added: `POST /api/v1/cv-generations`
+* ✅ Backward compatible alias supported: `POST /v1/orchestrator/generate-cv`
+* ✅ Accepts camelCase + snake_case requests
+* ✅ camelCase enforced for responses (success + error)
 * ✅ Optional role/JD supported
 * ✅ Stage-0 validation enforced
 * ⚠️ Data API values mocked
 
----
-
+```
+```
